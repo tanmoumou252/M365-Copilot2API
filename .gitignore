@@ -10,6 +10,8 @@ cookies*.txt
 /tmp/
 .kilo
 .kilo/*
+.zcode
+.zcode/*
 # Build artifacts
 /m365-copilot2api
 /build/

@@ -939,17 +939,17 @@ type oaiReq struct {
 	Messages       []oaiMsg        `json:"messages"`
 	Stream         bool            `json:"stream"`
 	// optional account routing
-	User           string               `json:"user"`
-	AccountID      string               `json:"accountId"`
-	ConversationID string               `json:"conversation_id"`
-	SessionID      string               `json:"session_id"`
-	SessionKey     string               `json:"session_key"`
+	User           string `json:"user"`
+	AccountID      string `json:"accountId"`
+	ConversationID string `json:"conversation_id"`
+	SessionID      string `json:"session_id"`
+	SessionKey     string `json:"session_key"`
 	// CamelCase aliases mirroring the response metadata fields; clients echo
 	// m365.conversationId / m365.sessionId back verbatim.
-	ConversationIDC string `json:"conversationId,omitempty"`
-	SessionIDC      string `json:"sessionId,omitempty"`
-	Attachments    []chathub.Attachment `json:"attachments,omitempty"`
-	Tools          []chathub.Tool       `json:"tools,omitempty"`
+	ConversationIDC string               `json:"conversationId,omitempty"`
+	SessionIDC      string               `json:"sessionId,omitempty"`
+	Attachments     []chathub.Attachment `json:"attachments,omitempty"`
+	Tools           []chathub.Tool       `json:"tools,omitempty"`
 	// Legacy OpenAI-compatible clients still send functions/function_call.
 	Functions       []json.RawMessage `json:"functions,omitempty"`
 	ToolChoice      any               `json:"tool_choice,omitempty"`
@@ -1684,7 +1684,7 @@ APPLICATION_REQUEST_AND_EVIDENCE:
 			"message":       assistant,
 			"finish_reason": "stop",
 		}},
-		"m365": compatM365Metadata(res),
+		"m365":  compatM365Metadata(res),
 		"usage": openAIUsage(model, answerPrompt, res.Text, historyCacheTokens),
 	})
 }
