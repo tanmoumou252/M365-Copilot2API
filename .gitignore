@@ -8,7 +8,8 @@ accounts.json
 *.har
 cookies*.txt
 /tmp/
-
+.kilo
+.kilo/*
 # Build artifacts
 /m365-copilot2api
 /m365-copilot2api.exe

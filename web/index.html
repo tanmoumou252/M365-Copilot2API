@@ -219,7 +219,7 @@ body{background:var(--bg);color:var(--text);font-family:"Inter","SF Pro Display"
 .usage-overview-item{background:var(--surface);-webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);padding:16px 20px;transition:background .3s ease;animation:slideUp .4s var(--ease-out) both}
 .usage-overview-item:nth-child(2){animation-delay:.05s}.usage-overview-item:nth-child(3){animation-delay:.1s}
 .usage-overview-top{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
-.usage-overview-top i{width:14px;height:14px}
+.usage-overview-top i,.usage-overview-top svg{width:14px;height:14px}
 .usage-overview-value{display:block;font-size:24px;font-weight:700;letter-spacing:-0.03em;margin-top:6px;color:var(--text);font-variant-numeric:tabular-nums}
 .usage-overview-value small{font-size:12px;color:var(--muted);font-weight:500;margin-left:3px}
 .usage-overview-sub{margin-top:3px;font-size:11px;color:var(--muted)}
@@ -250,7 +250,7 @@ body{background:var(--bg);color:var(--text);font-family:"Inter","SF Pro Display"
 .bar-fill.teal{background:linear-gradient(90deg,#30b0c7,#5ac8fa)}
 .bar-fill.pink{background:linear-gradient(90deg,#ff2d55,#ff6482)}
 .chart-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:120px;color:var(--muted);font-size:12px}
-.chart-empty i{width:28px;height:28px;color:var(--muted);opacity:.5}
+.chart-empty i,.chart-empty svg{width:28px;height:28px;color:var(--muted);opacity:.5}
 .pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .usage-status{display:inline-flex;align-items:center;justify-content:center;min-width:52px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:rgba(52,199,89,.12);color:var(--green)}
 .usage-status.err{background:rgba(255,59,48,.1);color:var(--red)}
@@ -287,6 +287,23 @@ body{background:var(--bg);color:var(--text);font-family:"Inter","SF Pro Display"
         <input class="form-input" id="loginPassword" type="password" placeholder="Enter administrator password" autofocus>
       </div>
       <button type="submit" class="btn primary" style="width:100%;margin-top:8px">Log in</button>
+    </form>
+  </div>
+</div>
+
+<!-- Change default password -->
+<div id="change" style="min-height:100vh;display:none;place-items:center">
+  <div style="width:min(400px,calc(100vw - 32px));animation:scaleIn .5s var(--ease-out)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div class="logo" style="display:flex;align-items:center;gap:10px;justify-content:center;margin:0 auto 12px;padding:0"><div class="logo-mark" style="width:32px;height:32px"><span></span><span></span><span></span><span></span></div><span style="font-size:24px;font-weight:700;letter-spacing:-0.02em">M365 Copilot2API</span></div>
+      <p style="color:var(--muted);font-size:14px;margin-top:4px">Change the default password</p>
+    </div>
+    <form id="changeForm" style="background:var(--surface);-webkit-backdrop-filter:blur(40px) saturate(180%);backdrop-filter:blur(40px) saturate(180%);border:1px solid var(--surface-border);border-radius:var(--radius);padding:32px;box-shadow:var(--shadow-lg)">
+      <p class="form-hint" style="margin-bottom:16px">The default password must be changed before using the administration console.</p>
+      <div class="form-group"><label class="form-label">Current password</label><input class="form-input" id="changeCurrent" type="password" autocomplete="current-password" required></div>
+      <div class="form-group"><label class="form-label">New password</label><input class="form-input" id="changeNext" type="password" autocomplete="new-password" minlength="6" maxlength="256" required></div>
+      <div class="form-group"><label class="form-label">Confirm new password</label><input class="form-input" id="changeConfirm" type="password" autocomplete="new-password" minlength="6" maxlength="256" required></div>
+      <button type="submit" class="btn primary" style="width:100%;margin-top:8px">Change password and log in again</button>
     </form>
   </div>
 </div>
@@ -607,7 +624,7 @@ if (response.output_text) {
       <!-- Settings -->
       <section id="page-settings" style="display:none">
         <h2 style="font-size:18px;font-weight:700;margin-bottom:16px">Settings</h2>
-        <div class="card"><div class="card-body"><div class="form-group"><label class="form-label">Listen address</label><input class="form-input" id="setListen" placeholder="127.0.0.1:4141"></div><div class="form-group"><label class="form-label">Chat timeout (seconds)</label><input class="form-input" id="setTimeout" type="number" placeholder="120"></div><div class="form-group"><label class="form-label" for="languageSelect">Language</label><select class="form-input" id="languageSelect"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt-BR">Português (Brasil)</option><option value="ru">Русский</option><option value="ar">العربية</option></select><p class="form-hint">Choose the language used by the administration console.</p></div><div style="margin-top:16px"><button class="btn primary" onclick="saveSettings()">Save settings</button></div></div></div>
+        <div class="card"><div class="card-body"><div class="form-group"><label class="form-label">Listen address</label><input class="form-input" id="setListen" placeholder="127.0.0.1:4141"></div><div class="form-group"><label class="form-label">Chat timeout (seconds)</label><input class="form-input" id="setTimeout" type="number" placeholder="120"></div><div class="form-group"><label class="form-label">Tool calls per turn</label><input class="form-input" id="setMaxToolCallsPerTurn" type="number" min="1" max="64" placeholder="32"></div><div class="form-group"><label class="form-label">Tool rounds</label><input class="form-input" id="setMaxToolRounds" type="number" min="1" max="512" placeholder="512"></div><p class="form-hint">Environment variables override these values at runtime.</p><div class="form-group"><label class="form-label" for="languageSelect">Language</label><select class="form-input" id="languageSelect"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt-BR">Português (Brasil)</option><option value="ru">Русский</option><option value="ar">العربية</option></select><p class="form-hint">Choose the language used by the administration console.</p></div><div style="margin-top:16px"><button class="btn primary" onclick="saveSettings()">Save settings</button></div></div></div>
       </section>
     </div>
   </main>
@@ -845,7 +862,16 @@ const localeText={
   'Not checked': {'zh-CN':'未检测','zh-TW':'未檢測','ja':'未確認','ko':'확인 안 됨','es':'Sin comprobar','fr':'Non vérifié','de':'Nicht geprüft','pt-BR':'Não verificado','ru':'Не проверено','ar':'لم يتم التحقق'},
   'Cooling down': {'zh-CN':'冷却中','zh-TW':'冷卻中','ja':'クールダウン中','ko':'쿨다운 중','es':'Enfriando','fr':'En attente','de':'Wird abgekühlt','pt-BR':'Resfriando','ru':'Ожидание','ar':'جارٍ التهدئة'},
   'Testing…': {'zh-CN':'测试中…','zh-TW':'測試中…','ja':'テスト中…','ko':'테스트 중…','es':'Probando…','fr':'Test en cours…','de':'Wird getestet…','pt-BR':'Testando…','ru':'Тестирование…','ar':'جارٍ الاختبار…'},
-  'Failed': {'zh-CN':'失败','zh-TW':'失敗','ja':'失敗','ko':'실패','es':'Fallido','fr':'Échec','de':'Fehlgeschlagen','pt-BR':'Falhou','ru':'Ошибка','ar':'فشل'}
+  'Failed': {'zh-CN':'失败','zh-TW':'失敗','ja':'失敗','ko':'실패','es':'Fallido','fr':'Échec','de':'Fehlgeschlagen','pt-BR':'Falhou','ru':'Ошибка','ar':'فشل'},
+  'Change the default password': {'zh-CN':'修改默认密码','zh-TW':'修改預設密碼','ja':'デフォルトパスワードを変更','ko':'기본 비밀번호 변경','es':'Cambiar la contraseña predeterminada','fr':'Modifier le mot de passe par défaut','de':'Standardpasswort ändern','pt-BR':'Alterar a senha padrão','ru':'Изменить пароль по умолчанию','ar':'تغيير كلمة المرور الافتراضية'},
+  'The default password must be changed before using the administration console.': {'zh-CN':'使用管理控制台前必须修改默认密码。','zh-TW':'使用管理主控台前必須修改預設密碼。','ja':'管理コンソールを使用する前にデフォルトパスワードを変更してください。','ko':'관리 콘솔을 사용하기 전에 기본 비밀번호를 변경해야 합니다.','es':'Debe cambiar la contraseña predeterminada antes de usar la consola de administración.','fr':'Le mot de passe par défaut doit être modifié avant d’utiliser la console d’administration.','de':'Das Standardpasswort muss vor der Verwendung der Administrationskonsole geändert werden.','pt-BR':'A senha padrão deve ser alterada antes de usar o console de administração.','ru':'Перед использованием консоли администратора необходимо изменить пароль по умолчанию.','ar':'يجب تغيير كلمة المرور الافتراضية قبل استخدام وحدة تحكم الإدارة.'},
+  'Current password': {'zh-CN':'当前密码','zh-TW':'目前密碼','ja':'現在のパスワード','ko':'현재 비밀번호','es':'Contraseña actual','fr':'Mot de passe actuel','de':'Aktuelles Passwort','pt-BR':'Senha atual','ru':'Текущий пароль','ar':'كلمة المرور الحالية'},
+  'New password': {'zh-CN':'新密码','zh-TW':'新密碼','ja':'新しいパスワード','ko':'새 비밀번호','es':'Nueva contraseña','fr':'Nouveau mot de passe','de':'Neues Passwort','pt-BR':'Nova senha','ru':'Новый пароль','ar':'كلمة المرور الجديدة'},
+  'Confirm new password': {'zh-CN':'确认新密码','zh-TW':'確認新密碼','ja':'新しいパスワードの確認','ko':'새 비밀번호 확인','es':'Confirmar nueva contraseña','fr':'Confirme la nueva contraseña','de':'Neues Passwort bestätigen','pt-BR':'Confirmar nova senha','ru':'Подтвердите новый пароль','ar':'تأكيد كلمة المرور الجديدة'},
+  'Change password and log in again': {'zh-CN':'修改密码并重新登录','zh-TW':'修改密碼並重新登入','ja':'パスワードを変更して再ログイン','ko':'비밀번호 변경 후 다시 로그인','es':'Cambiar la contraseña y volver a iniciar sesión','fr':'Modifier le mot de passe et se reconnecter','de':'Passwort ändern und erneut anmelden','pt-BR':'Alterar a senha e entrar novamente','ru':'Изменить пароль и войти снова','ar':'تغيير كلمة المرور وتسجيل الدخول مرة أخرى'},
+  'Tool calls per turn': {'zh-CN':'每轮工具调用数','zh-TW':'每輪工具呼叫數','ja':'ターンごとのツール呼び出し数','ko':'턴당 도구 호출 수','es':'Llamadas de herramientas por turno','fr':'Appels d’outils par tour','de':'Tool-Aufrufe pro Runde','pt-BR':'Chamadas de ferramentas por turno','ru':'Вызовы инструментов за раунд','ar':'استدعاءات الأدوات لكل دور'},
+  'Tool rounds': {'zh-CN':'工具轮次','zh-TW':'工具回合數','ja':'ツールラウンド数','ko':'도구 라운드 수','es':'Rondas de herramientas','fr':'Tours d’outils','de':'Tool-Runden','pt-BR':'Rodadas de ferramentas','ru':'Раунды инструментов','ar':'جниات الأدوات'},
+  'Environment variables override these values at runtime.': {'zh-CN':'环境变量会在运行时覆盖这些值。','zh-TW':'環境變數會在執行時覆蓋這些值。','ja':'環境変数は実行時にこれらの値を上書きします。','ko':'환경 변수는 런타임에 이 값을 덮어씁니다.','es':'Las variables de entorno anulan estos valores en tiempo de ejecución.','fr':'Les variables d’environnement remplacent ces valeurs à l’exécution.','de':'Umgebungsvariablen überschreiben diese Werte zur Laufzeit.','pt-BR':'As variáveis de ambiente substituem estes valores em tempo de execução.','ru':'Переменные окружения переопределяют эти значения во время выполнения.','ar':'تتجاوز متغيرات البيئة هذه القيم أثناء التشغيل.'}
 };
 let currentLocale='en';
 let localeObserver=null;
@@ -934,6 +960,7 @@ function showPage(p){
   if(p==='conversations')loadConversations();
   if(p==='proxies')loadProxies();
   if(p==='modeltest')loadModelTest();
+  if(p==='settings')loadSettings();
 }
 
 let onboardingHidden=false;
@@ -981,8 +1008,10 @@ async function api(path,opts={}){
 $('loginForm')?.addEventListener('submit',async e=>{
   e.preventDefault();
   try{
-    await api('/api/admin/login',{method:'POST',body:JSON.stringify({password:$('loginPassword').value})});
-    $('login').style.display='none';$('app').style.display='flex';
+    const password=$('loginPassword').value;
+    const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({password})});
+    if(d.must_change_password){showChangePassword(password);return;}
+    $('login').style.display='none';$('change').style.display='none';$('app').style.display='flex';
     showPage('dashboard');loadStats();
     showNotice('Logged in successfully','success');
   }catch(e){showNotice(e.message,'error');}
@@ -1502,23 +1531,63 @@ async function modelTestAll(){
   showNotice('Model test complete','success');
 }
 
+async function loadSettings(){
+  try{
+    const d=await api('/api/admin/settings');
+    const s=d.settings||{};
+    if(s.listenAddress!=null)$('setListen').value=s.listenAddress;
+    if(s.chatTimeoutSeconds!=null)$('setTimeout').value=s.chatTimeoutSeconds;
+    if(s.maxToolCallsPerTurn!=null)$('setMaxToolCallsPerTurn').value=s.maxToolCallsPerTurn;
+    if(s.maxToolRounds!=null)$('setMaxToolRounds').value=s.maxToolRounds;
+  }catch(e){showNotice(e.message,'error');}
+}
+
 async function saveSettings(){  try{
     const listen=$('setListen').value.trim();
     const timeout=$('setTimeout').value.trim();
+    const calls=$('setMaxToolCallsPerTurn').value.trim();
+    const rounds=$('setMaxToolRounds').value.trim();
     const body={};
-    if(listen)body.listen=listen;
-    if(timeout)body.chatTimeoutSeconds=parseInt(timeout);
+    if(listen)body.listenAddress=listen;
+    if(timeout)body.chatTimeoutSeconds=parseInt(timeout,10);
+    if(calls)body.maxToolCallsPerTurn=parseInt(calls,10);
+    if(rounds)body.maxToolRounds=parseInt(rounds,10);
     await api('/api/admin/settings',{method:'PUT',body:JSON.stringify(body)});
     showNotice('Settings saved','success');
   }catch(e){showNotice(e.message,'error');}
 }
 
+function showChangePassword(current=''){
+  $('login').style.display='none';
+  $('app').style.display='none';
+  $('change').style.display='grid';
+  if(current)$('changeCurrent').value=current;
+  $('changeNext').focus();
+}
+
+$('changeForm')?.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const current=$('changeCurrent').value;
+  const next=$('changeNext').value;
+  const confirm=$('changeConfirm').value;
+  if(next!==confirm){showNotice('The new passwords do not match','error');return;}
+  if(next==='admin123'){showNotice('The new password must not be the default password','error');return;}
+  if(next.length<6){showNotice('The new password must be at least 6 characters','error');return;}
+  if(next.length>256){showNotice('The new password is too long','error');return;}
+  try{
+    await api('/api/admin/change-password',{method:'POST',body:JSON.stringify({current_password:current,new_password:next})});
+    showNotice('Password changed successfully. Log in again.','success');
+    location.reload();
+  }catch(e){showNotice(e.message,'error');}
+});
+
 // Init
 try{lucide.createIcons();}catch(e){}
 fetch('/api/admin/session').then(r=>r.json()).then(d=>{
-  if(d.authenticated){$('login').style.display='none';$('app').style.display='flex';showPage('dashboard');loadStats();loadOnboarding();}
-  else{$('login').style.display='grid';}
-}).catch(()=>{$('login').style.display='grid';});
+  if(d.authenticated&&d.must_change_password){showChangePassword();}
+  else if(d.authenticated){$('login').style.display='none';$('change').style.display='none';$('app').style.display='flex';showPage('dashboard');loadStats();loadOnboarding();}
+  else{$('login').style.display='grid';$('change').style.display='none';$('app').style.display='none';}
+}).catch(()=>{$('login').style.display='grid';$('change').style.display='none';$('app').style.display='none';});
 </script>
 </body>
 </html>

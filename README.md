@@ -184,8 +184,8 @@ docker compose up -d --build
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `M365_TOOL_PLANNING_MODE` | `router` | 工具规划模式：`router`（网关路由规划）/ `native`（云端原生规划） |
-| `M365_MAX_TOOL_CALLS_PER_TURN` | `1` | 单轮最多并行工具调用数（有副作用操作自动降为串行） |
-| `M365_MAX_TOOL_ROUNDS` | `16` | 单次请求最大工具轮次 |
+| `M365_MAX_TOOL_CALLS_PER_TURN` | `32` | 单轮最多并行工具调用数（有副作用操作自动降为串行） |
+| `M365_MAX_TOOL_ROUNDS` | `512` | 单次请求最大工具轮次 |
 | `M365_CONTEXT_WINDOW` | `128000` | 上下文窗口 |
 | `M365_MAX_OUTPUT_TOKENS` | `16384` | 最大输出 Token |
 | `M365_CHAT_TIMEOUT_SECONDS` | `120` | 聊天超时（秒） |
