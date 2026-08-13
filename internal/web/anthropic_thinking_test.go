@@ -13,7 +13,7 @@ func TestWriteAnthropicResultThinkingPlain(t *testing.T) {
 		"reasoning_content": "deep think",
 	}}}}
 	w := httptest.NewRecorder()
-	writeAnthropicResult(w, "claude-sonnet", false, src)
+	writeAnthropicResult(w, "claude-sonnet", false, src, 0, 0, 0)
 	var out struct {
 		Content []map[string]any `json:"content"`
 	}
@@ -33,7 +33,7 @@ func TestAnthropicResultContentParts(t *testing.T) {
 		},
 	}}}}
 	w := httptest.NewRecorder()
-	writeAnthropicResult(w, "m", false, src)
+	writeAnthropicResult(w, "m", false, src, 0, 0, 0)
 	var out struct {
 		Content []map[string]any `json:"content"`
 	}
@@ -53,7 +53,7 @@ func TestAnthropicStreamEmitsThinkingSSE(t *testing.T) {
 		"reasoning_content": "think1",
 	}}}}
 	w := httptest.NewRecorder()
-	writeAnthropicResult(w, "m", true, src)
+	writeAnthropicResult(w, "m", true, src, 0, 0, 0)
 	body := w.Body.String()
 	if !strings.Contains(body, `"type":"thinking"`) && !strings.Contains(body, `thinking_delta`) {
 		t.Fatalf("missing thinking SSE frames: %s", body)

@@ -3,6 +3,7 @@ package web
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,6 +41,7 @@ func (s *Server) streamResponsesAdapter(w http.ResponseWriter, r *http.Request, 
 	o.Stream = true
 	b, _ := json.Marshal(o)
 	r2 := r.Clone(r.Context())
+	r2 = r2.WithContext(context.WithValue(r2.Context(), skipUsageRecordKey, true))
 	r2.Method = http.MethodPost
 	r2.Body = io.NopCloser(bytes.NewReader(b))
 	r2.ContentLength = int64(len(b))
@@ -213,6 +215,7 @@ func (s *Server) runOpenAIAdapter(r *http.Request, o oaiReq) (map[string]any, []
 	o.Stream = false
 	b, _ := json.Marshal(o)
 	r2 := r.Clone(r.Context())
+	r2 = r2.WithContext(context.WithValue(r2.Context(), skipUsageRecordKey, true))
 	r2.Method = http.MethodPost
 	r2.Body = io.NopCloser(bytes.NewReader(b))
 	r2.ContentLength = int64(len(b))
@@ -279,6 +282,10 @@ func (s *Server) responses(w http.ResponseWriter, r *http.Request) {
 	estimate := estimateResponsesUsage(firstNonEmpty(body.Model, "m365-copilot"), o.Messages, o.Tools, o.ToolChoice, outputForUsage)
 	out["usage"] = estimate.Values
 	out["m365_usage_source"] = estimate.Source
+	cacheTokens := 0
+	if v, ok := estimate.Values["cache_read_input_tokens"].(int); ok {
+		cacheTokens = v
+	}
 	s.usage.record(UsageRecord{
 		Time:         time.Now(),
 		APIKeyPrefix: extractAPIKey(r),
@@ -286,6 +293,7 @@ func (s *Server) responses(w http.ResponseWriter, r *http.Request) {
 		Endpoint:     "/v1/responses",
 		InputTokens:  int64(estimate.Values["input_tokens"].(int)),
 		OutputTokens: int64(estimate.Values["output_tokens"].(int)),
+		CacheTokens:  int64(cacheTokens),
 		DurationMs:   time.Since(startedAt).Milliseconds(),
 		Status:       200,
 	})
@@ -375,16 +383,33 @@ func (s *Server) anthropicMessages(w http.ResponseWriter, r *http.Request) {
 		writeAnthropicError(w, http.StatusBadGateway, "api_error", "upstream protocol error: "+err.Error())
 		return
 	}
-	estimate := estimateResponsesUsage(firstNonEmpty(body.Model, "m365-copilot"), o.Messages, o.Tools, o.ToolChoice, "")
+	model := firstNonEmpty(body.Model, "m365-copilot")
+	// 与 /v1/chat/completions 同一估算口径（EstimateTokens），并让 WebUI
+	// 用量统计与响应体 usage 保持一致；输出 token 按实际回复文本估算。
+	promptText, _ := flattenPromptMessages(o.Messages, nil)
+	msg, _ := openAIChoice(out)
+	outputText := ""
+	if msg != nil {
+		if s, ok := msg["content"].(string); ok {
+			outputText = s
+		}
+		if calls, ok := msg["tool_calls"].([]any); ok {
+			outputText += fmt.Sprint(calls)
+		}
+	}
+	inputTokens := countTokens(model, promptText)
+	outputTokens := countTokens(model, outputText)
+	cacheTokens := historyTokensFor(model, o.Messages)
 	s.usage.record(UsageRecord{
 		Time:         time.Now(),
 		APIKeyPrefix: extractAPIKey(r),
-		Model:        firstNonEmpty(body.Model, "m365-copilot"),
+		Model:        model,
 		Endpoint:     "/v1/messages",
-		InputTokens:  int64(estimate.Values["input_tokens"].(int)),
-		OutputTokens: int64(estimate.Values["output_tokens"].(int)),
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		CacheTokens:  cacheTokens,
 		DurationMs:   time.Since(startedAt).Milliseconds(),
 		Status:       200,
 	})
-	writeAnthropicResult(w, firstNonEmpty(body.Model, "m365-copilot"), body.Stream, out)
+	writeAnthropicResult(w, model, body.Stream, out, inputTokens, outputTokens, cacheTokens)
 }

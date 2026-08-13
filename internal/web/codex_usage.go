@@ -40,6 +40,18 @@ func getGPTTokenizer() (tiktoken.Codec, error) {
 	return gptTokenizer, gptTokenizerErr
 }
 
+func countTokens(model, text string) int64 {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if strings.HasPrefix(m, "gpt-") {
+		if enc, err := getGPTTokenizer(); err == nil {
+			if ids, _, err := enc.Encode(text); err == nil {
+				return int64(len(ids))
+			}
+		}
+	}
+	return int64(heuristicTokenCount(text))
+}
+
 func heuristicTokenCount(text string) int {
 	ascii, other := 0, 0
 	for _, r := range text {
@@ -93,7 +105,12 @@ func serializedTokenCount(v any, count func(string) int) int {
 func estimateResponsesUsage(model string, input []oaiMsg, tools []chathub.Tool, toolChoice any, output string) responsesUsageEstimate {
 	count, source := tokenEstimator(model)
 	in := requestProtocolTokens + replyPrimingTokens
-	for _, message := range input {
+	var cacheTokens int
+	upper := len(input)
+	if upper > 0 {
+		upper = upper - 1
+	}
+	for i, message := range input {
 		in += messageProtocolTokens
 		in += count(message.Role)
 		in += serializedTokenCount(message.Content, count)
@@ -101,6 +118,15 @@ func estimateResponsesUsage(model string, input []oaiMsg, tools []chathub.Tool, 
 		in += count(message.ToolCallID)
 		for _, call := range message.ToolCalls {
 			in += serializedTokenCount(call, count)
+		}
+		if i < upper {
+			cacheTokens += count(message.Role)
+			cacheTokens += serializedTokenCount(message.Content, count)
+			cacheTokens += count(message.Name)
+			cacheTokens += count(message.ToolCallID)
+			for _, call := range message.ToolCalls {
+				cacheTokens += serializedTokenCount(call, count)
+			}
 		}
 	}
 	for _, tool := range tools {
@@ -113,7 +139,11 @@ func estimateResponsesUsage(model string, input []oaiMsg, tools []chathub.Tool, 
 	if output != "" {
 		out += outputProtocolTokens
 	}
-	return responsesUsageEstimate{Values: map[string]any{"input_tokens": in, "output_tokens": out, "total_tokens": in + out}, Source: source}
+	values := map[string]any{"input_tokens": in, "output_tokens": out, "total_tokens": in + out}
+	if cacheTokens > 0 {
+		values["cache_read_input_tokens"] = cacheTokens
+	}
+	return responsesUsageEstimate{Values: values, Source: source}
 }
 
 func localUsageMetadata(source string) map[string]any {

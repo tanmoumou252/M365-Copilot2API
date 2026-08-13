@@ -24,6 +24,10 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	skipUsageRecordKey = struct{}{}
+)
+
 type pendingPKCE struct {
 	Verifier string
 	Created  time.Time
@@ -362,7 +366,7 @@ func (s *Server) adminKeys(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, map[string]any{"key": raw, "record": rec})
 	case http.MethodDelete:
 		id := r.URL.Query().Get("id")
-		deleted, e := s.apiKeys.delete(id)
+		prefix, deleted, e := s.apiKeys.delete(id)
 		if e != nil {
 			http.Error(w, e.Error(), http.StatusInternalServerError)
 			return
@@ -370,6 +374,15 @@ func (s *Server) adminKeys(w http.ResponseWriter, r *http.Request) {
 		if !deleted {
 			http.Error(w, "key not found", 404)
 			return
+		}
+		if prefix != "" {
+			// 用量里 APIKeyPrefix = raw[:8]+"..."，而 key 存储 Prefix = raw[:12]，
+			// 故 Prefix[:8]+"..." 与用量 APIKeyPrefix 精确相等，purge 必然命中。
+			up := prefix
+			if len(up) > 8 {
+				up = up[:8] + "..."
+			}
+			s.usage.purgePrefix(up)
 		}
 		jsonOut(w, map[string]string{"status": "deleted"})
 	case http.MethodPut:
@@ -1083,6 +1096,7 @@ func (s *Server) openaiChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	historyCacheTokens := historyTokensFor(body.Model, body.Messages)
 	accountID := body.AccountID
 	acc, err := s.resolveAccount(accountID)
 	if err != nil {
@@ -1161,7 +1175,7 @@ func (s *Server) openaiChat(w http.ResponseWriter, r *http.Request) {
 				calls[i].ID = scopedCallID(calls[i].Name, string(calls[i].Arguments), i, scope)
 			}
 			calls = limitToolCalls(calls, adaptiveToolCallLimit(calls, configuredToolCallLimit(s.settings)))
-			_ = writeToolResponse(w, "chatcmpl-"+uuid.NewString(), firstNonEmpty(body.Model, "m365-copilot"), answerPrompt, true, calls, routeRes)
+			_ = writeToolResponse(w, "chatcmpl-"+uuid.NewString(), firstNonEmpty(body.Model, "m365-copilot"), answerPrompt, true, calls, routeRes, historyCacheTokens)
 			return
 		}
 	}
@@ -1339,7 +1353,7 @@ func (s *Server) openaiChat(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(calls) > 0 {
 			calls = limitToolCalls(calls, adaptiveToolCallLimit(calls, configuredToolCallLimit(s.settings)))
-			_ = writeToolResponse(w, id, model, answerPrompt, true, calls, chathub.Result{Text: text.String()})
+			_ = writeToolResponse(w, id, model, answerPrompt, true, calls, chathub.Result{Text: text.String()}, historyCacheTokens)
 			if body.User != "" && res.ConversationID != "" {
 				s.userSessions.Put(body.User, res.ConversationID, res.SessionID, acc.ID)
 			}
@@ -1350,7 +1364,7 @@ func (s *Server) openaiChat(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[req-trace] id=%s stage=stream_write err=%v", requestID, err)
 			return
 		}
-		_ = sseRaw(r.Context(), w, flusher, "data: "+mustJSON(map[string]any{"id": id, "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{}, "usage": openAIUsage(answerPrompt, res.Text)})+"\n\n")
+		_ = sseRaw(r.Context(), w, flusher, "data: "+mustJSON(map[string]any{"id": id, "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{}, "usage": openAIUsage(model, answerPrompt, res.Text, historyCacheTokens)})+"\n\n")
 		_ = sseRaw(r.Context(), w, flusher, "data: [DONE]\n\n")
 		if body.User != "" && res.ConversationID != "" {
 			s.userSessions.Put(body.User, res.ConversationID, res.SessionID, acc.ID)
@@ -1385,7 +1399,7 @@ func (s *Server) openaiChat(w http.ResponseWriter, r *http.Request) {
 				calls[i].ID = scopedCallID(calls[i].Name, string(calls[i].Arguments), i, scope)
 			}
 			calls = limitToolCalls(calls, adaptiveToolCallLimit(calls, configuredToolCallLimit(s.settings)))
-			_ = writeToolResponse(w, "chatcmpl-"+uuid.NewString(), firstNonEmpty(body.Model, "m365-copilot"), answerPrompt, body.Stream, calls, routeRes)
+			_ = writeToolResponse(w, "chatcmpl-"+uuid.NewString(), firstNonEmpty(body.Model, "m365-copilot"), answerPrompt, body.Stream, calls, routeRes, historyCacheTokens)
 			return
 		}
 		if fmt.Sprint(body.ToolChoice) == "required" {
@@ -1403,7 +1417,7 @@ APPLICATION_REQUEST_AND_EVIDENCE:
 						calls[i].ID = scopedCallID(calls[i].Name, string(calls[i].Arguments), i, scope)
 					}
 					calls = limitToolCalls(calls, adaptiveToolCallLimit(calls, configuredToolCallLimit(s.settings)))
-					_ = writeToolResponse(w, "chatcmpl-"+uuid.NewString(), firstNonEmpty(body.Model, "m365-copilot"), answerPrompt, body.Stream, calls, retryRes)
+					_ = writeToolResponse(w, "chatcmpl-"+uuid.NewString(), firstNonEmpty(body.Model, "m365-copilot"), answerPrompt, body.Stream, calls, retryRes, historyCacheTokens)
 					return
 				}
 			}
@@ -1500,7 +1514,7 @@ APPLICATION_REQUEST_AND_EVIDENCE:
 		}
 		if err == nil {
 			s.accountPool.MarkSuccess(acc.ID)
-			_ = sseRaw(r.Context(), w, flusher, "data: "+mustJSON(map[string]any{"id": id, "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{}, "usage": openAIUsage(answerPrompt, res.Text)})+"\n\n")
+			_ = sseRaw(r.Context(), w, flusher, "data: "+mustJSON(map[string]any{"id": id, "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": model, "choices": []any{}, "usage": openAIUsage(model, answerPrompt, res.Text, historyCacheTokens)})+"\n\n")
 			_ = sseRaw(r.Context(), w, flusher, "data: [DONE]\n\n")
 		} else {
 			log.Printf("[req-trace] id=%s stage=stream_error err=%v", requestID, err)
@@ -1575,12 +1589,12 @@ APPLICATION_REQUEST_AND_EVIDENCE:
 	id := "chatcmpl-" + uuid.NewString()
 	if calls := fencedToolCalls(res.Text, toolMaps, body.ToolChoice); len(calls) > 0 {
 		calls = limitToolCalls(calls, adaptiveToolCallLimit(calls, configuredToolCallLimit(s.settings)))
-		_ = writeToolResponse(w, id, model, answerPrompt, body.Stream, calls, res)
+		_ = writeToolResponse(w, id, model, answerPrompt, body.Stream, calls, res, historyCacheTokens)
 		return
 	}
 	if calls := nativeToolCalls(res.Events, body.Tools); len(calls) > 0 {
 		calls = limitToolCalls(calls, adaptiveToolCallLimit(calls, configuredToolCallLimit(s.settings)))
-		_ = writeToolResponse(w, id, model, answerPrompt, body.Stream, calls, res)
+		_ = writeToolResponse(w, id, model, answerPrompt, body.Stream, calls, res, historyCacheTokens)
 		return
 	}
 	// Recover natural-language tool intent when native mode emits no
@@ -1602,7 +1616,7 @@ APPLICATION_REQUEST_AND_EVIDENCE:
 					calls[i].ID = scopedCallID(calls[i].Name, string(calls[i].Arguments), i, scope)
 				}
 				calls = limitToolCalls(calls, adaptiveToolCallLimit(calls, configuredToolCallLimit(s.settings)))
-				_ = writeToolResponse(w, id, model, answerPrompt, body.Stream, calls, routeRes)
+				_ = writeToolResponse(w, id, model, answerPrompt, body.Stream, calls, routeRes, historyCacheTokens)
 				return
 			}
 		}
@@ -1635,7 +1649,7 @@ APPLICATION_REQUEST_AND_EVIDENCE:
 		}
 		b, _ := json.Marshal(chunk)
 		_ = sseRaw(r.Context(), w, flusher, "data: "+string(b)+"\n\n")
-		_ = sseRaw(r.Context(), w, flusher, "data: "+mustJSON(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{}, "usage": openAIUsage(answerPrompt, res.Text)})+"\n\n")
+		_ = sseRaw(r.Context(), w, flusher, "data: "+mustJSON(map[string]any{"id": id, "object": "chat.completion.chunk", "created": created, "model": model, "choices": []any{}, "usage": openAIUsage(model, answerPrompt, res.Text, historyCacheTokens)})+"\n\n")
 		_ = sseRaw(r.Context(), w, flusher, "data: [DONE]\n\n")
 		return
 	}
@@ -1671,11 +1685,25 @@ APPLICATION_REQUEST_AND_EVIDENCE:
 			"finish_reason": "stop",
 		}},
 		"m365": compatM365Metadata(res),
-		"usage": openAIUsage(answerPrompt, res.Text),
+		"usage": openAIUsage(model, answerPrompt, res.Text, historyCacheTokens),
 	})
 }
 
 const sessionHeaderName = "X-M365-Session-Id"
+
+// historyTokensFor 估算历史消息（除最后一条当前轮消息外）消耗的 token，
+// 与 WebUI 用量统计的 CacheTokens / 缓存命中仪表盘同一口径（EstimateTokens）。
+func historyTokensFor(model string, messages []oaiMsg) int64 {
+	upper := len(messages) - 1
+	if upper < 0 {
+		upper = 0
+	}
+	var historyTokens int64
+	for _, msg := range messages[:upper] {
+		historyTokens += countTokens(model, contentToString(msg.Content))
+	}
+	return historyTokens
+}
 
 // bindConversation 在请求完成后登记会话解析器索引与缓存统计，流式与非流式
 // 路径共用。会话为内容键，云端的对话由 auto_cleanup 按 2h 闲置窗口回收，
@@ -1693,30 +1721,25 @@ func (s *Server) bindConversation(acc auth.AccountToken, body *oaiReq, r *http.R
 	}
 
 	apiKey := extractAPIKey(r)
-	historyTokens := int64(0)
-	upper := len(body.Messages) - 1
-	if upper < 0 {
-		upper = 0
-	}
-	for _, msg := range body.Messages[:upper] {
-		historyTokens += EstimateTokens(contentToString(msg.Content))
-	}
-	newTokens := EstimateTokens(prompt)
+	historyTokens := historyTokensFor(body.Model, body.Messages)
+	newTokens := countTokens(body.Model, prompt)
 	sessions := s.sessionResolver.ListSessions()
 	cacheStats.RecordRequest(apiKey, historyTokens > 0, newTokens, historyTokens, len(sessions))
-	s.usage.record(UsageRecord{
-		Time:         time.Now(),
-		APIKeyPrefix: apiKey,
-		AccountEmail: acc.Email,
-		Model:        firstNonEmpty(body.Model, "m365-copilot"),
-		Endpoint:     "/v1/chat/completions",
-		Stream:       body.Stream,
-		InputTokens:  newTokens,
-		OutputTokens: EstimateTokens(res.Text),
-		CacheTokens:  historyTokens,
-		DurationMs:   time.Since(startedAt).Milliseconds(),
-		Status:       200,
-	})
+	if r.Context().Value(skipUsageRecordKey) == nil {
+		s.usage.record(UsageRecord{
+			Time:         time.Now(),
+			APIKeyPrefix: apiKey,
+			AccountEmail: acc.Email,
+			Model:        firstNonEmpty(body.Model, "m365-copilot"),
+			Endpoint:     "/v1/chat/completions",
+			Stream:       body.Stream,
+			InputTokens:  newTokens,
+			OutputTokens: countTokens(body.Model, res.Text),
+			CacheTokens:  historyTokens,
+			DurationMs:   time.Since(startedAt).Milliseconds(),
+			Status:       200,
+		})
+	}
 }
 
 func extractAPIKey(r *http.Request) string {

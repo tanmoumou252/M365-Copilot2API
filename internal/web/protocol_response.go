@@ -20,7 +20,15 @@ func openAIChoice(v map[string]any) (map[string]any, string) {
 	return m, finish
 }
 
-func writeAnthropicResult(w http.ResponseWriter, model string, stream bool, src map[string]any) {
+// writeAnthropicResult 将内部 OpenAI 响应转换为 Anthropic Messages 格式。
+// usage 值由调用方传入（本网关本地估算口径，与 WebUI 用量统计一致），
+// 流式路径按 Anthropic SSE 规范分放：message_start 填输入侧，
+// message_delta 填输出侧。
+func writeAnthropicResult(w http.ResponseWriter, model string, stream bool, src map[string]any, inputTokens, outputTokens, cacheTokens int64) {
+	usageOut := map[string]any{"input_tokens": inputTokens, "output_tokens": outputTokens}
+	if cacheTokens > 0 {
+		usageOut["cache_read_input_tokens"] = cacheTokens
+	}
 	id := "msg_" + uuid.NewString()
 	msg, finish := openAIChoice(src)
 	blocks := []any{}
@@ -64,7 +72,7 @@ func writeAnthropicResult(w http.ResponseWriter, model string, stream bool, src 
 		}
 	}
 	_ = finish
-	out := map[string]any{"id": id, "type": "message", "role": "assistant", "model": model, "content": blocks, "stop_reason": stop, "stop_sequence": nil, "usage": map[string]any{"input_tokens": 0, "output_tokens": 0}, "m365": map[string]any{"usage_source": "unavailable_from_chathub", "usage_values_are_placeholders": true}}
+	out := map[string]any{"id": id, "type": "message", "role": "assistant", "model": model, "content": blocks, "stop_reason": stop, "stop_sequence": nil, "usage": usageOut, "m365": map[string]any{"usage_source": "local_estimate", "usage_values_are_estimates": true}}
 	if !stream {
 		jsonOut(w, out)
 		return
@@ -80,7 +88,11 @@ func writeAnthropicResult(w http.ResponseWriter, model string, stream bool, src 
 			aborted = true
 		}
 	}
-	emit("message_start", map[string]any{"type": "message_start", "message": map[string]any{"id": id, "type": "message", "role": "assistant", "model": model, "content": []any{}, "stop_reason": nil, "usage": map[string]any{"input_tokens": 0, "output_tokens": 0}}})
+	messageStartUsage := map[string]any{"input_tokens": usageOut["input_tokens"]}
+	if cacheTokens > 0 {
+		messageStartUsage["cache_read_input_tokens"] = usageOut["cache_read_input_tokens"]
+	}
+	emit("message_start", map[string]any{"type": "message_start", "message": map[string]any{"id": id, "type": "message", "role": "assistant", "model": model, "content": []any{}, "stop_reason": nil, "usage": messageStartUsage}})
 	for i, b := range blocks {
 		m, _ := b.(map[string]any)
 		startBlock := b
@@ -108,7 +120,7 @@ func writeAnthropicResult(w http.ResponseWriter, model string, stream bool, src 
 		}
 		emit("content_block_stop", map[string]any{"type": "content_block_stop", "index": i})
 	}
-	emit("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil}, "usage": map[string]any{"output_tokens": 0}})
+	emit("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil}, "usage": map[string]any{"output_tokens": usageOut["output_tokens"]}})
 	emit("message_stop", map[string]any{"type": "message_stop"})
 }
 

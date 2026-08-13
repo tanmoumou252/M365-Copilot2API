@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,11 +29,12 @@ type UsageRecord struct {
 const maxUsageRecords = 50000
 
 type usageLog struct {
-	mu      sync.Mutex
-	Path    string
-	records []UsageRecord
-	pending []UsageRecord
-	persist *persistStore
+	mu        sync.Mutex
+	Path      string
+	records   []UsageRecord
+	pending   []UsageRecord
+	retention time.Duration // 0 表示关闭时间裁剪，仅保留 maxUsageRecords 计数上限
+	persist   *persistStore
 }
 
 var globalUsage = &usageLog{}
@@ -47,11 +49,28 @@ func openUsageLog() *usageLog {
 		}
 		p = filepath.Join(dir, "usage.jsonl")
 	}
-	s := &usageLog{Path: p}
+	s := &usageLog{Path: p, retention: parseRetentionHours()}
 	s.persist = &persistStore{flush: s.flush}
 	_ = os.MkdirAll(filepath.Dir(p), 0700)
 	s.load()
 	return s
+}
+
+// parseRetentionHours 解析 M365_USAGE_RETENTION_HOURS：
+// 缺省或解析失败保持默认 2h；正整数 N → N·h；0 或负数 → 0（关闭时间裁剪）。
+func parseRetentionHours() time.Duration {
+	v := strings.TrimSpace(os.Getenv("M365_USAGE_RETENTION_HOURS"))
+	if v == "" {
+		return 2 * time.Hour
+	}
+	h, err := strconv.Atoi(v)
+	if err != nil {
+		return 2 * time.Hour
+	}
+	if h > 0 {
+		return time.Duration(h) * time.Hour
+	}
+	return 0
 }
 
 func (s *usageLog) load() {
@@ -62,16 +81,32 @@ func (s *usageLog) load() {
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var lines int
 	for scanner.Scan() {
 		var rec UsageRecord
 		if json.Unmarshal(scanner.Bytes(), &rec) == nil {
 			s.records = append(s.records, rec)
+			lines++
 		}
 	}
 	s.trim()
+	// 迁移标记：开启时间裁剪且 load 时发生裁剪（磁盘原始行数 > 裁剪后内存记录数），
+	// 标记 dirty，使启动后首轮 persist tick 触发整文件重写，立即压缩历史大文件。
+	// 否则旧大文件要等到首个新请求 record() 后才会被重写。
+	if s.retention > 0 && len(s.records) < lines {
+		s.persist.markDirty()
+	}
 }
 
 func (s *usageLog) trim() {
+	if s.retention > 0 {
+		cutoff := time.Now().Add(-s.retention)
+		i := 0
+		for i < len(s.records) && s.records[i].Time.Before(cutoff) {
+			i++
+		}
+		s.records = s.records[i:]
+	}
 	if len(s.records) > maxUsageRecords {
 		s.records = s.records[len(s.records)-maxUsageRecords:]
 	}
@@ -86,35 +121,51 @@ func (s *usageLog) record(rec UsageRecord) {
 	s.persist.markDirty()
 }
 
-// flush 批量追加本次累积的记录，锁外写盘。
+// flush 整文件重写：把当前已裁剪的 records 全量写回，保证磁盘文件 == 内存
+// records，从根上给文件大小设上限（不再 append-only 无限增长）。失败仅 markDirty
+// 让下一轮 persist tick 重试全量重写，内存 records 不丢失，不涉及 pending 回退。
 func (s *usageLog) flush() error {
 	s.mu.Lock()
-	pending := s.pending
+	snap := append([]UsageRecord(nil), s.records...)
 	s.pending = nil
 	s.mu.Unlock()
-	if len(pending) == 0 {
-		return nil
-	}
 	var buf []byte
-	for _, rec := range pending {
+	for _, rec := range snap {
 		if b, err := json.Marshal(rec); err == nil {
 			buf = append(buf, b...)
 			buf = append(buf, '\n')
 		}
 	}
-	f, err := os.OpenFile(s.Path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
-	if err != nil {
+	if err := writeFileAtomic(s.Path, buf, 0600); err != nil {
+		s.persist.markDirty()
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(buf)
-	if err != nil {
-		s.mu.Lock()
-		s.pending = append(pending, s.pending...)
-		s.mu.Unlock()
-		return err
+	return nil
+}
+
+// purgePrefix 从 records 与 pending 中移除所有 APIKeyPrefix == prefix 的记录，
+// 随后 markDirty 触发重写落盘（删除 API Key 时联动清除其用量历史）。
+func (s *usageLog) purgePrefix(prefix string) {
+	if prefix == "" {
+		return
 	}
-	return f.Sync()
+	s.mu.Lock()
+	kept := s.records[:0]
+	for _, r := range s.records {
+		if r.APIKeyPrefix != prefix {
+			kept = append(kept, r)
+		}
+	}
+	s.records = kept
+	keptP := s.pending[:0]
+	for _, r := range s.pending {
+		if r.APIKeyPrefix != prefix {
+			keptP = append(keptP, r)
+		}
+	}
+	s.pending = keptP
+	s.mu.Unlock()
+	s.persist.markDirty()
 }
 
 func (s *usageLog) snapshot(days int) map[string]any {
@@ -122,6 +173,8 @@ func (s *usageLog) snapshot(days int) map[string]any {
 	recs := append([]UsageRecord(nil), s.records...)
 	s.mu.Unlock()
 
+	// cutoff 仅决定从“已保留”记录中按时间过滤展示的跨度（days 面板）。
+	// 真正的磁盘保留窗口由 M365_USAGE_RETENTION_HOURS 控制（见 trim）。
 	cutoff := time.Now().AddDate(0, 0, -days)
 	loc := time.Now().Location()
 	today := time.Now().In(loc).Truncate(24 * time.Hour)

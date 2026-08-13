@@ -15,6 +15,7 @@ func newTestServerForAutoCleanup(t *testing.T) *Server {
 	t.Setenv("M365_CONVERSATION_CACHE", filepath.Join(dir, "conversations.json"))
 	t.Setenv("M365_USER_SESSION_CACHE", filepath.Join(dir, "users.json"))
 	os.Setenv("TMPDIR", dir)
+	t.Cleanup(func() { os.Unsetenv("TMPDIR") })
 	return &Server{
 		sessions:            openSessionStore(),
 		userSessions:        openUserSessionStore(30 * time.Minute),

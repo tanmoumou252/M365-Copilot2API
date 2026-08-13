@@ -10,6 +10,8 @@ func (s *Server) adminUsage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	// 本项目为临时/自用网关，无保留长周期日志的必要；days 仅决定从“已保留”记录中
+	// 按时间过滤展示的跨度，真实磁盘保留窗口由 M365_USAGE_RETENTION_HOURS 控制。
 	days := 7
 	if v := r.URL.Query().Get("days"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 365 {

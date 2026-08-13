@@ -200,4 +200,3 @@ func TestErrRateLimitNoticeTriggersMarkFailure(t *testing.T) {
 		t.Fatal("ErrRateLimitNotice must put account in cooldown")
 	}
 }
->>>>>>> 7118802 (fix: stream rate-limit detection, failover with session resolver, replace Jaccard with suffix match)

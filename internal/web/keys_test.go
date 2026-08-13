@@ -38,7 +38,7 @@ func TestAPIKeyDeletePhysicallyRemoves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deleted, err := store.delete(r1.ID)
+	_, deleted, err := store.delete(r1.ID)
 	if err != nil || !deleted {
 		t.Fatalf("delete=%v err=%v", deleted, err)
 	}
@@ -50,7 +50,7 @@ func TestAPIKeyDeletePhysicallyRemoves(t *testing.T) {
 	if len(store.Keys) != 1 || store.Keys[0].ID != r2.ID {
 		t.Fatalf("unexpected remaining keys: %+v", store.Keys)
 	}
-	if deleted, _ := store.delete("no-such-id"); deleted {
+	if _, deleted, _ := store.delete("no-such-id"); deleted {
 		t.Fatal("delete of unknown id should report false")
 	}
 }
@@ -62,7 +62,7 @@ func TestAPIKeyDeleteRollsBackWhenPersistenceFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.Path = t.TempDir()
-	deleted, err := store.delete(record.ID)
+	_, deleted, err := store.delete(record.ID)
 	if err == nil || deleted {
 		t.Fatalf("delete=%v err=%v, want persistence failure", deleted, err)
 	}

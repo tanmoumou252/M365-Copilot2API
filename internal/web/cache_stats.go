@@ -129,5 +129,5 @@ func (s *CacheStats) Reset() {
 }
 
 func EstimateTokens(text string) int64 {
-	return int64(len(text) / 4)
+	return countTokens("", text)
 }

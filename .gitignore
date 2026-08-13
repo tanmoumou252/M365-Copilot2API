@@ -12,7 +12,8 @@ cookies*.txt
 .kilo/*
 # Build artifacts
 /m365-copilot2api
-/m365-copilot2api.exe
+/build/
+#/m365-copilot2api.exe
 /m365-copilot2api.exe.rollback
 /bin/
 /dist/
@@ -49,3 +50,4 @@ AGENTS.md
 
 # WIP build during this session
 /m365-copilot2api.new*
+*.diff

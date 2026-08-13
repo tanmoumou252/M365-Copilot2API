@@ -124,7 +124,8 @@ func (s *apiKeyStore) revoke(id string) (bool, error) {
 }
 
 // delete physically removes a key record, rolling back on persistence failure.
-func (s *apiKeyStore) delete(id string) (bool, error) {
+// 返回被删 key 的 Prefix（删除失败回滚时返回空串），供调用方联动清除用量历史。
+func (s *apiKeyStore) delete(id string) (prefix string, ok bool, err error) {
 	s.mu.Lock()
 	for i := range s.Keys {
 		if s.Keys[i].ID != id {
@@ -133,16 +134,16 @@ func (s *apiKeyStore) delete(id string) (bool, error) {
 		removed := s.Keys[i]
 		s.Keys = append(s.Keys[:i], s.Keys[i+1:]...)
 		s.mu.Unlock()
-		if err := s.persist.flushNowBlocking(); err != nil {
+		if ferr := s.persist.flushNowBlocking(); ferr != nil {
 			s.mu.Lock()
 			s.Keys = append(s.Keys[:i], append([]apiKeyRecord{removed}, s.Keys[i:]...)...)
 			s.mu.Unlock()
-			return false, err
+			return "", false, ferr
 		}
-		return true, nil
+		return removed.Prefix, true, nil
 	}
 	s.mu.Unlock()
-	return false, nil
+	return "", false, nil
 }
 
 func (s *apiKeyStore) update(id, name string, revoked *bool) (bool, error) {
